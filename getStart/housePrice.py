@@ -1,76 +1,101 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.stats import norm
-from sklearn.preprocessing import StandardScaler
-from scipy import stats
+color = sns.color_palette() #设置seaborn的调色板，更改循环色
+sns.set_style('darkgrid')
 import warnings
-warnings.filterwarnings('ignore')
+def ignore_warn(*args, **kwargs):
+    pass
+warnings.warn = ignore_warn()
+# warnings.filterwarnings('ignore')
 
-df_train = pd.read_csv('data/housePrice/train.csv')
-# print(df_train.columns)
+from scipy import stats
+from scipy.stats import norm, skew
+# pd.set_option("display.float_format", lambda x:'{:,3f}'.format(x))
 
-# print(df_train['SalePrice'].describe())
-df_train.info()
+from subprocess import check_output
+
+train = pd.read_csv('data/housePrice/train.csv')
+test = pd.read_csv("data/housePrice/test.csv")
+
+train.info()
+
+train_Id = train.Id
+test_Id = test.Id
+train.drop('Id', axis=1, inplace=True)
+test.drop('Id', axis=1, inplace=True)
+
+print('The train data size without id is,{}'.format(train.shape))
+print('The test data size without id is,{}'.format(test.shape))
+
+# fig, ax = plt.subplots()
+# ax.scatter(x=train.GrLivArea, y=train.SalePrice)
+# plt.ylabel('SalePrice')
+# plt.xlabel('GrLivArea')
+
+#放弃不合理点
+train = train.drop(train[(train['GrLivArea']>4000) & (train['SalePrice']<300000)].index)
+
+# fig, ax = plt.subplots()
+# ax.scatter(x=train.GrLivArea, y=train.SalePrice)
+# plt.ylabel('SalePrice')
+# plt.xlabel('GrLivArea')
+
+# sns.distplot(train['SalePrice'], fit=norm)
 
 # fig = plt.figure()
-# df_train.SalePrice.plot(kind='kde')
+# res = stats.probplot(train['SalePrice'], plot=plt)
 
 
-print("Skewness: %f" % df_train['SalePrice'].skew())
-print("Kurtosis: %f" % df_train['SalePrice'].kurt())
+#saleprice log转换
+train.SalePrice = np.log1p(train.SalePrice)
+# sns.distplot(train['SalePrice'])
+train['SalePrice'].plot(kind='kde')
 
 
-
-# data = pd.concat([df_train.SalePrice, df_train.GrLivArea], axis=1)
-# data.plot.scatter()
-
-# var = 'GrLivArea'
-# data = pd.concat([df_train['SalePrice'], df_train[var]], axis=1)
-# data.plot.scatter(x='GrLivArea', y='SalePrice', ylim=(0,800000));
+# (mu, sigma) = norm.fit(train['SalePrice'])
+# print( '\n mu = {:.2f} and sigma = {:.2f}\n'.format(mu, sigma))
 #
-# data = pd.concat([df_train.SalePrice, df_train.TotalBsmtSF], axis=1)
-# data.plot.scatter('TotalBsmtSF', 'SalePrice', ylim=(0,800000))
-#
-# var = 'OverallQual'
-# data = pd.concat([df_train.OverallQual, df_train.SalePrice], axis=1)
-# f, ax=plt.subplots(figsize=(8,6))
-# fig = sns.boxplot(var, 'SalePrice', data=data)
-# fig.axis(ymin=0, ymax=80000)
-#
-# var = 'YearBuilt'
-# data = pd.concat([df_train.SalePrice, df_train[var]], axis=1)
-# f, ax = plt.subplots(figsize=(16,8))
-# fig = sns.boxplot(var, 'SalePrice', data=data)
-# fig.axis(ymin=0, ymax=800000)
-# plt.xticks(rotation=90)
+# #Now plot the distribution
+# plt.legend(['Normal dist. ($\mu=$ {:.2f} and $\sigma=$ {:.2f} )'.format(mu, sigma)],
+#             loc='best')
+# plt.ylabel('Frequency')
+# plt.title('SalePrice distribution')
 
-# #相关矩阵
-# corrmat = df_train.corr()
-# f, ax = plt.subplots(figsize=(12,9))
-# sns.heatmap(corrmat, vmax=0.8, square=True)
-#
-# #售价相关矩阵
-# k = 10
-# cols = corrmat.nlargest(k, 'SalePrice')['SalePrice'].index
-# cm = np.corrcoef(df_train[cols].values.T)
-# sns.set(font_scale=1.25)
-# hm = sns.heatmap(cm, cbar=True, square=True, fmt='.2f', annot_kws={'size':10},yticklabels=cols.values, xticklabels=cols.values)
-#
-# sns.set()
-# cols=['SalePrice', 'OverallQual', 'GrLivArea', 'GarageCars', 'TotalBsmtSF', 'FullBath', 'YearBuilt']
-# sns.pairplot(df_train[cols], size=2.5)
+# #Get also the QQ-plot
+# fig = plt.figure()
+# res = stats.probplot(train['SalePrice'], plot=plt)
 
-total = df_train.isnull().sum().sort_values(ascending=False)
-percent = (df_train.isnull().sum()/df_train.isnull().count()).sort_values(ascending=False)
-missing_data = pd.concat([total, percent], axis=1, keys=['Total', 'Percent'])
-print(missing_data.head(20))
+#处理数据缺失值
+#train与test同时处理
+ntrain = train.shape[0]
+ntest = test.shape[0]
 
+y_train = train.SalePrice.values
+all_data = pd.concat((train, test)).reset_index(drop=True)  #reset_index，重新设置索引
+all_data.drop('SalePrice', axis=1, inplace=True)  #inplace表示直接在原对象操作，不产生新对象
+print('all data size is :{}'.format(all_data.shape))
 
+all_data_na = (all_data.isnull().sum()/len(all_data)) * 100
+all_data_na = all_data_na.drop(all_data_na[all_data_na == 0].index).sort_values(ascending=False)[:30]   #取空值前30多的特征
+missing_data = pd.DataFrame({'Missing Ratio':all_data_na})
+print(missing_data.head(30))
 
+#显示各个特征的缺失值多少
+f, ax = plt.subplots(figsize=(15,12))
+plt.xticks(rotation='90')
+sns.barplot(x=all_data_na.index, y=all_data_na)
+plt.xlabel('Features')
+plt.ylabel('percent of missing values')
+plt.title('percent missing data by feature')
 
+corrmat = train.corr()
+plt.subplots(figsize=(12,9))
+sns.heatmap(corrmat, vmax=0.9, square=True)
 
+#填充缺失值
+all_data.PoolQC = all_data['PoolQC'].fillna('None') #None为python数据类型，NaN为numpy pandas的空值，实际为float类型
 
 
 
@@ -83,6 +108,10 @@ print(missing_data.head(20))
 
 
 plt.show()
+
+
+
+
 
 
 
